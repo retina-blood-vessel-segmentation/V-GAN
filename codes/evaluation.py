@@ -5,18 +5,38 @@ import numpy as np
 from sklearn.metrics import roc_curve, precision_recall_curve
 from sklearn.metrics.classification import confusion_matrix
 
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--comparison_out', type=str, default="../evaluation/{}/comparison/{}")
+parser.add_argument('--vessels_out', type=str, default="../evaluation/{}/vessels/{}")
+parser.add_argument('--curves_out', type=str, default="../evaluation/{}/measures")
+parser.add_argument('--testdata', type=str, default="../data/{}/test/images")
+parser.add_argument('--result_dir', type=str, default="../results")
+parser.add_argument('--mask_dir', type=str, default="mask")
+
+args = parser.parse_args()
+
+comparison_out = args.comparison_out
+vessels_out = args.vessels_out
+curves_out = args.curves_out
+testdata = args.testdata
+result_dir = args.result_dir
+mask_dir = args.mask_dir
+
+
 # set output directories
-comparison_out="../evaluation/{}/comparison/{}"
-vessels_out="../evaluation/{}/vessels/{}"
-curves_out="../evaluation/{}/measures"
-testdata="../data/{}/test/images"
+# comparison_out="../evaluation/{}/comparison/{}"
+# vessels_out="../evaluation/{}/vessels/{}"
+# curves_out="../evaluation/{}/measures"
+# testdata="../data/{}/test/images"
 
 # draw 
-result_dir="../results"
+# result_dir="../results"
 datasets=utils.all_files_under(result_dir)
 for dataset in datasets:
     all_results=utils.all_files_under(dataset)
-    mask_dir=os.path.join(dataset,"mask")
+    # mask_dir=os.path.join(dataset,"mask")             # u originalnom kodu je ovo otkomentarisano
     masks=utils.load_images_under_dir(mask_dir)/255
     gt_dir=os.path.join(dataset,"1st_manual")
     gt_vessels=utils.load_images_under_dir(gt_dir)/255

@@ -62,6 +62,7 @@ def STARE_files(data_path):
     mask_files=all_files_under(mask_dir, extension=".ppm")
     
     return img_files, vessel_files, mask_files
+
 def DRIVE_files(data_path):
     img_dir=os.path.join(data_path, "images")
     vessel_dir=os.path.join(data_path,"1st_manual")
@@ -70,6 +71,17 @@ def DRIVE_files(data_path):
     img_files=all_files_under(img_dir, extension=".tif")
     vessel_files=all_files_under(vessel_dir, extension=".gif")
     mask_files=all_files_under(mask_dir, extension=".gif")
+    
+    return img_files, vessel_files, mask_files
+
+def miniDROPS_files(data_path):
+    img_dir=os.path.join(data_path, "images")
+    vessel_dir=os.path.join(data_path,"1st_manual")
+    mask_dir=os.path.join(data_path,"mask")
+    
+    img_files=all_files_under(img_dir, extension=".jpg")
+    vessel_files=all_files_under(vessel_dir, extension=".png")
+    mask_files=all_files_under(mask_dir, extension=".png")
     
     return img_files, vessel_files, mask_files
 
@@ -350,6 +362,8 @@ def get_imgs(target_dir, augmentation, img_size, dataset, mask=False):
         img_files, vessel_files, mask_files = DRIVE_files(target_dir)
     elif dataset=='STARE':
         img_files, vessel_files, mask_files = STARE_files(target_dir)
+    elif dataset=='miniDROPS':
+        img_files, vessel_files, mask_files = miniDROPS_files(target_dir)
         
     # load images    
     fundus_imgs=imagefiles2arrs(img_files)

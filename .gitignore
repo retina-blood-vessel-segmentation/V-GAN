@@ -286,3 +286,5 @@ dmypy.json
 data/**/*
 evaluation/**/*
 inference_outputs/**/*
+results/**/*
+pretrained/**/*

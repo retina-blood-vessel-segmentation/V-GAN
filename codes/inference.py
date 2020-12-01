@@ -4,13 +4,45 @@ import os
 import utils
 import numpy as np
 
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--fundus_dir', type=str, default="../data/{}/test/images/")
+parser.add_argument('--mask_dir', type=str, default="../data/{}/test/mask/")
+parser.add_argument('--out_dir', type=str, default="../inference_outputs/{}")
+parser.add_argument('--f_model_dir', type=str, default="../pretrained")
+parser.add_argument('--f_model', type=str, default="../pretrained/{}_best.json")
+parser.add_argument('--f_weights', type=str, default="../pretrained/{}_best.h5")
+
+args = parser.parse_args()
+
+fundus_dir = args.fundus_dir
+mask_dir = args.mask_dir
+out_dir = args.out_dir
+
+if args.f_model is not None:
+    f_model = args.f_model
+    print(f_model)
+if args.f_weights is not None:
+    f_weights = args.f_weights
+
+# if (args.f_model_dir is not None):
+#     f_model = args.f_model_dir + "/{}_best.json"
+#     f_weights = args.f_model_dir + "/{}_best.h5"
+# else:
+#     f_model = args.f_model
+#     f_weights = args.f_weights
+
 # set filepath
-datasets=["DRIVE","STARE"]
-fundus_dir="../data/{}/test/images/"
-mask_dir="../data/{}/test/mask/"
-out_dir="../inference_outputs/{}"
-f_model="../pretrained/{}_best.json"
-f_weights="../pretrained/{}_best.h5"
+# datasets=["DRIVE","STARE"]
+# fundus_dir="../data/{}/test/images/"
+# mask_dir="../data/{}/test/mask/"
+# out_dir="../inference_outputs/{}"
+# f_model="../pretrained/{}_best.json"
+# f_weights="../pretrained/{}_best.h5"
+
+# datasets=["DRIVE"]
+datasets = ["miniDROPS"]
 
 for dataset in datasets:     
     # make directory
@@ -23,8 +55,22 @@ for dataset in datasets:
     model.load_weights(f_weights.format(dataset))
     
     # iterate all images
-    img_size=(640,640) if dataset=="DRIVE" else (720,720)
-    ori_shape=(1,584,565) if dataset=="DRIVE" else (1,605,700)  # batchsize=1
+    # img_size=(640,640) if dataset=="DRIVE" else (720,720)
+    if dataset=="DRIVE":
+        img_size=(640,640) 
+    elif dataset=="STARE":
+        img_size=(720,720)
+    elif dataset=="miniDROPS":
+        img_size=(640,640)
+
+    # ori_shape=(1,584,565) if dataset=="DRIVE" else (1,605,700)  # batchsize=1
+    if dataset=="DRIVE":
+        ori_shape=(1,584,565)
+    elif dataset=="STARE":
+        ori_shape=(1,605,700)
+    elif dataset=="miniDROPS":
+        ori_shape=(1,480,640)
+
     fundus_files=utils.all_files_under(fundus_dir.format(dataset))
     mask_files=utils.all_files_under(mask_dir.format(dataset))
     for index,fundus_file in enumerate(fundus_files):
