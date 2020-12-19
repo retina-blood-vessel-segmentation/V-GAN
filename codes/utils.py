@@ -42,13 +42,13 @@ def image_shape(filename):
 def imagefiles2arrs(filenames):
     img_shape = image_shape(filenames[0])
     if len(img_shape)==3:
-        images_arr = np.zeros((len(filenames), img_shape[0], img_shape[1], img_shape[2]), dtype=np.float32)
+        images_arr = np.zeros((len(filenames), img_shape[0], img_shape[1], img_shape[2]), dtype=np.float16)
     elif len(img_shape)==2:
-        images_arr = np.zeros((len(filenames), img_shape[0], img_shape[1]), dtype=np.float32)
+        images_arr = np.zeros((len(filenames), img_shape[0], img_shape[1]), dtype=np.float16)
     
-    for file_index in xrange(len(filenames)):
+    for file_index in range(len(filenames)):
         img = Image.open(filenames[file_index])
-        images_arr[file_index] = np.asarray(img).astype(np.float32)
+        images_arr[file_index] = np.asarray(img).astype(np.float16)
     
     return images_arr
 
@@ -71,6 +71,17 @@ def DRIVE_files(data_path):
     img_files=all_files_under(img_dir, extension=".tif")
     vessel_files=all_files_under(vessel_dir, extension=".gif")
     mask_files=all_files_under(mask_dir, extension=".gif")
+    
+    return img_files, vessel_files, mask_files
+
+def CHASE_files(data_path):
+    img_dir=os.path.join(data_path, "images")
+    vessel_dir=os.path.join(data_path,"1st_manual")
+    mask_dir=os.path.join(data_path,"mask")
+    
+    img_files=all_files_under(img_dir, extension=".jpg")
+    vessel_files=all_files_under(vessel_dir, extension=".png")
+    mask_files=all_files_under(mask_dir, extension=".png")
     
     return img_files, vessel_files, mask_files
 
@@ -122,10 +133,10 @@ def input2gan(real_img_patches, real_vessel_patches, d_out_shape):
     return g_x_batch, g_y_batch
     
 def print_metrics(itr, **kargs):
-    print "*** Round {}  ====> ".format(itr),
+    print("*** Round {}  ====> ".format(itr))
     for name, value in kargs.items():
         print ( "{} : {}, ".format(name, value)),
-    print ""
+    print("")
     sys.stdout.flush()
 
 class TrainBatchFetcher(Iterator):
@@ -141,6 +152,229 @@ class TrainBatchFetcher(Iterator):
     def next(self):
         indices=list(np.random.choice(self.n_train_imgs, self.batch_size))
         return self.train_imgs[indices,:,:,:], self.train_vessels[indices,:,:,:] 
+
+class LowMemoryTrainBatchFetcher(Iterator):
+    """
+    fetch batch of original images and vessel images
+    """
+    def __init__(self, batch_size, target_dir, augmentation, img_size, dataset, val_ratio, validation = False, mask=False):
+        self.img_files = []
+        self.vessel_files = []
+        self.mask_files = []
+        self.dataset_factor = 1
+        if dataset=='DRIVE':
+            self.img_files, self.vessel_files, self.mask_files = DRIVE_files(target_dir)
+            self.dataset_factor = 255
+        elif dataset=='STARE':
+            self.img_files, self.vessel_files, self.mask_files = STARE_files(target_dir)
+            self.dataset_factor = 255
+        elif dataset=='miniDROPS':
+            self.img_files, self.vessel_files, self.mask_files = miniDROPS_files(target_dir)
+            self.dataset_factor = 255
+        elif dataset=='CHASE' or dataset=='CHASEDB1':
+            self.img_files, self.vessel_files, self.mask_files = CHASE_files(target_dir)
+            self.dataset_factor = 255
+        self.n_all_imgs=len(self.img_files)
+        self.val_ratio = val_ratio
+        if validation:
+            if not augmentation:
+                self.n_val = int((1-val_ratio)*self.n_all_imgs)
+                self.n_train_imgs=int((1-val_ratio)*self.n_all_imgs)
+                self.train_indices = np.random.choice(self.n_all_imgs, self.n_train_imgs, replace = False)
+                self.train_img_files = np.array([self.img_files[i] for i in self.train_indices])
+                self.val_img_files = np.array([self.img_files[i] for i in range(0, len(self.img_files)) if i not in self.train_indices])
+                if mask:
+                    self.train_mask_files = np.array([self.mask_files[i] for i in self.train_indices])
+                    self.val_mask_files = np.array([self.mask_files[i] for i in range(0, len(self.img_files)) if i not in self.train_indices])
+                self.train_vessel_files = np.array([self.vessel_files[i] for i in self.train_indices])
+                self.val_vessel_files = np.array([self.vessel_files[i] for i in range(0, len(self.img_files)) if i not in self.train_indices])
+            else:
+                self.n_val = int((val_ratio)*self.n_all_imgs*239)
+                v = self.n_all_imgs * 239
+                self.reserved = np.random.choice(v, self.n_val, False).astype(np.int)
+                self.n_train_imgs=self.n_all_imgs
+                self.train_indices=range(0, self.n_train_imgs)
+                self.train_img_files = np.array(self.img_files)
+                if mask:
+                    self.train_mask_files = np.array(self.mask_files)
+                self.train_vessel_files = np.array(self.vessel_files)
+        else:
+            self.n_train_imgs=self.n_all_imgs
+            self.train_indices=range(0, self.n_train_imgs)
+            self.train_img_files = np.array(self.img_files)
+            if mask:
+                self.train_mask_files = np.array(self.mask_files)
+            self.train_vessel_files = np.array(self.vessel_files)
+        self.augmentation = augmentation
+        self.img_size = img_size
+        self.dataset = dataset
+        self.mask = mask
+        self.batch_size=batch_size
+        self.validation = validation
+
+    def getValidation(self):
+        if not self.validation:
+            return None
+        if not self.augmentation:
+            fundus_imgs=imagefiles2arrs(list(self.val_img_files))
+            vessel_imgs=imagefiles2arrs(list(self.val_vessel_files))/self.dataset_factor
+            print("got files")
+            fundus_imgs=pad_imgs(fundus_imgs, self.img_size)
+            vessel_imgs=pad_imgs(vessel_imgs, self.img_size)
+            print("Padded files")
+            assert(np.min(vessel_imgs)==0 and np.max(vessel_imgs)==1)
+            if self.mask:
+                mask_imgs=imagefiles2arrs(list(self.val_mask_files))/self.dataset_factor
+                mask_imgs=pad_imgs(mask_imgs, self.img_size)
+                print("masked")
+                assert(np.min(mask_imgs)==0 and np.max(mask_imgs)==1) 
+            # z score with mean, std of each image
+            print("Augmentation done")
+            n_all_imgs=fundus_imgs.shape[0]
+            print(f'Got {n_all_imgs} images.')
+            for index in range(n_all_imgs):
+                print(f'Processing index {index}')
+                mean=np.mean(fundus_imgs[index,...][fundus_imgs[index,...,0] > 40.0],axis=0)
+                std=np.std(fundus_imgs[index,...][fundus_imgs[index,...,0] > 40.0],axis=0)
+                assert len(mean)==3 and len(std)==3
+                fundus_imgs[index,...]=(fundus_imgs[index,...]-mean)/std
+            
+            if self.mask:
+                return fundus_imgs, vessel_imgs, mask_imgs
+            else:
+                return fundus_imgs, vessel_imgs
+        else:
+            rindex = (self.reserved // 239).astype(np.int)
+            fundus_imgs=imagefiles2arrs(list(self.train_img_files[rindex]))
+            vessel_imgs=imagefiles2arrs(list(self.train_vessel_files[rindex]))/self.dataset_factor
+            print("got files")
+            fundus_imgs=pad_imgs(fundus_imgs, self.img_size)
+            vessel_imgs=pad_imgs(vessel_imgs, self.img_size)
+            print("Padded files")
+            assert(np.min(vessel_imgs)==0 and np.max(vessel_imgs)==1)
+            if self.mask:
+                mask_imgs=imagefiles2arrs(list(self.train_mask_files[rindex]))/self.dataset_factor
+                mask_imgs=pad_imgs(mask_imgs, self.img_size)
+                print("masked")
+                assert(np.min(mask_imgs)==0 and np.max(mask_imgs)==1) 
+            # z score with mean, std of each image
+            mods = self.reserved % 239
+            for (i, m) in enumerate(mods):
+                if m == 0:
+                    continue
+                if m % 2 == 1:
+                    fundus_imgs[i] = fundus_imgs[i, :, ::-1, :]
+                    if(self.dataset != "CHASE"):
+                        vessel_imgs[i] = vessel_imgs[i, :, ::-1, :]
+                    else:
+                        vessel_imgs[i] = vessel_imgs[i, :, ::-1]
+                angle = (m % 119) * 3 + 3 #3-360 in range
+                fundus_imgs[i] = random_perturbation(rotate(fundus_imgs[i], angle, axes=(0, 1), reshape=False))
+                vessel_imgs[i] = rotate(vessel_imgs[i], angle, axes=(0, 1), reshape=False)
+            print("Augmentation done")
+            n_all_imgs=fundus_imgs.shape[0]
+            print(f'Got {n_all_imgs} images.')
+            for index in range(n_all_imgs):
+                print(f'Processing index {index}')
+                mean=np.mean(fundus_imgs[index,...][fundus_imgs[index,...,0] > 40.0],axis=0)
+                std=np.std(fundus_imgs[index,...][fundus_imgs[index,...,0] > 40.0],axis=0)
+                assert len(mean)==3 and len(std)==3
+                fundus_imgs[index,...]=(fundus_imgs[index,...]-mean)/std           
+            if self.mask:
+                return fundus_imgs, vessel_imgs, mask_imgs
+            else:
+                return fundus_imgs, vessel_imgs
+    def getTrainN(self):
+        return self.train_img_files.shape[0] * 239
+
+        # if self.augmentation:
+        #     # augment the original image (flip, rotate)
+        #     all_fundus_imgs=[fundus_imgs]
+        #     all_vessel_imgs=[vessel_imgs]
+        #     flipped_imgs=fundus_imgs[:,:,::-1,:]    # flipped imgs
+        #     flipped_vessels=vessel_imgs[:,:,::-1]
+        #     all_fundus_imgs.append(flipped_imgs)
+        #     all_vessel_imgs.append(flipped_vessels)
+        #     for angle in range(3,360,3):  # rotated imgs 3~360
+        #         all_fundus_imgs.append(random_perturbation(rotate(fundus_imgs, angle, axes=(1, 2), reshape=False)))
+        #         all_fundus_imgs.append(random_perturbation(rotate(flipped_imgs, angle, axes=(1, 2), reshape=False)))
+        #         all_vessel_imgs.append(rotate(vessel_imgs, angle, axes=(1, 2), reshape=False))
+        #         all_vessel_imgs.append(rotate(flipped_vessels, angle, axes=(1, 2), reshape=False))
+        #     fundus_imgs=np.concatenate(all_fundus_imgs,axis=0)
+        #     vessel_imgs=np.round((np.concatenate(all_vessel_imgs,axis=0)))   
+
+    def next(self):
+        if self.augmentation:
+            n = self.train_img_files.shape[0]
+            indices = np.random.choice(n, self.batch_size, False)
+            mods = np.random.choice(239, self.batch_size, True)
+            imgf = list(self.train_img_files[indices])
+            gndf = list(self.train_vessel_files[indices])
+            if self.mask:
+                mskf = list(self.train_mask_files[indices])
+            fundus_imgs=imagefiles2arrs(imgf)
+            vessel_imgs=imagefiles2arrs(gndf)/self.dataset_factor
+            fundus_imgs=pad_imgs(fundus_imgs, self.img_size)
+            vessel_imgs=pad_imgs(vessel_imgs, self.img_size)
+            assert(np.min(vessel_imgs)==0 and np.max(vessel_imgs)==1)
+            if self.mask:
+                mask_imgs=imagefiles2arrs(mskf)/self.dataset_factor
+                mask_imgs=pad_imgs(mask_imgs, self.img_size)
+                assert(np.min(mask_imgs)==0 and np.max(mask_imgs)==1)
+            for (i, m) in enumerate(mods):
+                if m == 0:
+                    continue
+                if m % 2 == 1:
+                    fundus_imgs[i] = fundus_imgs[i, :, ::-1, :]
+                    if(self.dataset != "CHASE"):
+                        vessel_imgs[i] = vessel_imgs[i, :, ::-1, :]
+                    else:
+                        vessel_imgs[i] = vessel_imgs[i, :, ::-1]
+                angle = (m % 119) * 3 + 3 #3-360 in range
+                fundus_imgs[i] = random_perturbation(rotate(fundus_imgs[i], angle, axes=(0, 1), reshape=False))
+                vessel_imgs[i] = rotate(vessel_imgs[i], angle, axes=(0, 1), reshape=False)
+            # z score with mean, std of each image
+            n_all_imgs=fundus_imgs.shape[0]
+            for index in range(n_all_imgs):
+                mean=np.mean(fundus_imgs[index,...][fundus_imgs[index,...,0] > 40.0],axis=0)
+                std=np.std(fundus_imgs[index,...][fundus_imgs[index,...,0] > 40.0],axis=0)
+                assert len(mean)==3 and len(std)==3
+                fundus_imgs[index,...]=(fundus_imgs[index,...]-mean)/std
+            
+            if self.mask:
+                return fundus_imgs, vessel_imgs, mask_imgs
+            else:
+                return fundus_imgs, vessel_imgs
+        else:
+            n = self.train_img_files.shape[0]
+            if(self.batch_size > n):
+                self.batch_size = n
+            indices = np.random.choice(n, self.batch_size, False)
+            imgf = list(self.train_img_files[indices])
+            gndf = list(self.train_vessel_files[indices])
+            if self.mask:
+                mskf = list(self.train_mask_files[indices])
+            fundus_imgs=imagefiles2arrs(imgf)
+            vessel_imgs=imagefiles2arrs(gndf)/self.dataset_factor
+            fundus_imgs=pad_imgs(fundus_imgs, self.img_size)
+            vessel_imgs=pad_imgs(vessel_imgs, self.img_size)
+            assert(np.min(vessel_imgs)==0 and np.max(vessel_imgs)==1)
+            if self.mask:
+                mask_imgs=imagefiles2arrs(mskf)/self.dataset_factor
+                mask_imgs=pad_imgs(mask_imgs, self.img_size)
+                assert(np.min(mask_imgs)==0 and np.max(mask_imgs)==1)
+            # z score with mean, std of each image
+            n_all_imgs=fundus_imgs.shape[0]
+            for index in range(n_all_imgs):
+                mean=np.mean(fundus_imgs[index,...][fundus_imgs[index,...,0] > 40.0],axis=0)
+                std=np.std(fundus_imgs[index,...][fundus_imgs[index,...,0] > 40.0],axis=0)
+                assert len(mean)==3 and len(std)==3
+                fundus_imgs[index,...]=(fundus_imgs[index,...]-mean)/std
+            
+            if self.mask:
+                return fundus_imgs, vessel_imgs, mask_imgs
+            else:
+                return fundus_imgs, vessel_imgs
 
 def AUC_ROC(true_vessel_arr, pred_vessel_arr, save_fname):
     """
@@ -161,11 +395,11 @@ def plot_AUC_ROC(fprs,tprs,method_names,fig_dir,op_pts):
     indices=[7,2,5,3,4,6,1,8,0] if len(fprs)==9 else [4,1,2,3,0] 
 
     # print auc  
-    print "****** ROC AUC ******"
-    print "CAVEAT : AUC of V-GAN with 8bit images might be lower than the floating point array (check <home>/pretrained/auc_roc*.npy)"
+    print("****** ROC AUC ******")
+    print("CAVEAT : AUC of V-GAN with 8bit images might be lower than the floating point array (check <home>/pretrained/auc_roc*.npy)")
     for index in indices:
         if method_names[index]!='CRFs' and method_names[index]!='2nd_manual':
-            print "{} : {:04}".format(method_names[index],auc(fprs[index],tprs[index]))
+            print("{} : {:04}".format(method_names[index],auc(fprs[index],tprs[index])))
     
     # plot results
     for index in indices:
@@ -199,11 +433,11 @@ def plot_AUC_PR(precisions, recalls, method_names, fig_dir, op_pts):
     indices=[7,2,5,3,4,6,1,8,0] if len(precisions)==9 else [4,1,2,3,0] 
 
     # print auc  
-    print "****** Precision Recall AUC ******"
-    print "CAVEAT : AUC of V-GAN with 8bit images might be lower than the floating point array (check <home>/pretrained/auc_pr*.npy)"
+    print("****** Precision Recall AUC ******")
+    print("CAVEAT : AUC of V-GAN with 8bit images might be lower than the floating point array (check <home>/pretrained/auc_pr*.npy)")
     for index in indices:
         if method_names[index]!='CRFs' and method_names[index]!='2nd_manual':
-            print "{} : {:04}".format(method_names[index],auc(recalls[index],precisions[index]))
+            print("{} : {:04}".format(method_names[index],auc(recalls[index],precisions[index])))
     
     # plot results
     for index in indices:
@@ -348,13 +582,20 @@ def pad_imgs(imgs, img_size):
     
     return padded
     
-def random_perturbation(imgs):
-    for i in range(imgs.shape[0]):
-        im=Image.fromarray(imgs[i,...].astype(np.uint8))
-        en=ImageEnhance.Color(im)
-        im=en.enhance(random.uniform(0.8,1.2))
-        imgs[i,...]= np.asarray(im).astype(np.float32)
-    return imgs 
+#def random_perturbation(imgs):
+#    for i in range(imgs.shape[0]):
+#        im=Image.fromarray(imgs[i,...].astype(np.uint8))
+#       en=ImageEnhance.Color(im)
+#        im=en.enhance(random.uniform(0.8,1.2))
+#        imgs[i,...]= np.asarray(im).astype(np.float32)
+#    return imgs 
+
+def random_perturbation(img):
+    im=Image.fromarray(img.astype(np.uint8))
+    en=ImageEnhance.Color(im)
+    im=en.enhance(random.uniform(0.8,1.2))
+    return np.asarray(im).astype(np.float16)
+
     
 def get_imgs(target_dir, augmentation, img_size, dataset, mask=False):
     
@@ -364,6 +605,8 @@ def get_imgs(target_dir, augmentation, img_size, dataset, mask=False):
         img_files, vessel_files, mask_files = STARE_files(target_dir)
     elif dataset=='miniDROPS':
         img_files, vessel_files, mask_files = miniDROPS_files(target_dir)
+    elif dataset=='CHASE' or dataset=='CHASEDB1':
+        img_files, vessel_files, mask_files = CHASE_files(target_dir)
         
     # load images    
     fundus_imgs=imagefiles2arrs(img_files)
