@@ -104,7 +104,7 @@ with open(os.path.join(model_out_dir,"g_{}_{}.json".format(FLAGS.discriminator,F
         
 # start training
 scheduler=utils.Scheduler(n_train_imgs//batch_size, n_train_imgs//batch_size, schedules, init_lr) if alpha_recip>0 else utils.Scheduler(0, n_train_imgs//batch_size, schedules, init_lr)
-print "training {} images :".format(n_train_imgs)
+print("training {} images :".format(n_train_imgs))
 for n_round in range(n_rounds):
     
     # train D

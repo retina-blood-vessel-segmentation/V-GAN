@@ -288,3 +288,7 @@ evaluation/**/*
 inference_outputs/**/*
 results/**/*
 pretrained/**/*
+data
+results
+data/
+results/
