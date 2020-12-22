@@ -1,0 +1,9 @@
+name: VGAN network for retinal vessel segmentation
+entry_points:
+    test:
+        parameters:
+            dataset: {type: string, default: "DRIVE"}
+            spec: {type: string, default: "1.tmp"}
+        command: "python inference.py
+            --spec {spec}
+            --f_dataset {dataset}"

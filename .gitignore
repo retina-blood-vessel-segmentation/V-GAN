@@ -292,3 +292,7 @@ data
 results
 data/
 results/
+*.tmp
+codes/mlruns
+codes/mlruns/*
+codes/mlruns/**/*
