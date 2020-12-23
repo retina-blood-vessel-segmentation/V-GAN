@@ -290,3 +290,6 @@ results/**/*
 pretrained/**/*
 data
 results
+codes/mlruns
+codes/mlruns/*
+codes/*.tmp

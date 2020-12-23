@@ -69,8 +69,8 @@ else:
 img_out_dir="{}/probability_maps".format(FLAGS.dataset)
 model_out_dir="{}/model_{}_{}".format(FLAGS.dataset,FLAGS.discriminator,FLAGS.ratio_gan2seg)
 auc_out_dir="{}/auc_{}_{}".format(FLAGS.dataset,FLAGS.discriminator,FLAGS.ratio_gan2seg)
-train_dir="../data/{}/training/".format(dataset)
-test_dir="../data/{}/test/".format(dataset)
+train_dir="/home/veljko/sci/ret/netrepos/V-GAN/data/{}/train/".format(dataset)
+test_dir="/home/veljko/sci/ret/netrepos/V-GAN/data/{}/test/".format(dataset)
 if not os.path.isdir(img_out_dir):
     os.makedirs(img_out_dir)
 if not os.path.isdir(model_out_dir):
@@ -89,11 +89,11 @@ if not os.path.isdir(auc_out_dir):
 # set test dataset
 #test_imgs, test_vessels, test_masks=utils.get_imgs(test_dir, augmentation=False, img_size=img_size, dataset=dataset, mask=True)
 
-trbatch = utils.LowMemoryTrainBatchFetcher(batch_size, train_dir, True, img_size, FLAGS.dataset, val_ratio, True, False)
-#tsbatch = utils.LowMemoryTrainBatchFetcher(1024, test_dir, False, img_size, FLAGS.dataset, 0, False, True)
-print("Validation data acquisition starts...")
-val_imgs, val_vessels = trbatch.getValidation()
-print("Validation ends, test data acquisition starts...")
+trbatch = utils.LowMemoryTrainBatchFetcher(batch_size, train_dir, img_size, FLAGS.dataset, val_ratio, True, False)
+tsbatch = utils.LowMemoryTrainBatchFetcher(1024, test_dir, img_size, FLAGS.dataset, 0, False, True)
+#print("Validation data acquisition starts...")
+#val_imgs, val_vessels = trbatch.getValidation()
+#print("Validation ends, test data acquisition starts...")
 #test_imgs, test_vessels, test_masks = next(tsbatch)
 #print("Test acquisition initiated ends. Now what?")
 # create networks
@@ -125,40 +125,49 @@ print("training {} images :".format(n_train_imgs))
 for n_round in range(n_rounds):
     print(f"Here I am at round {n_round}")
     # train D
-    #utils.make_trainable(d, True)
-    for i in range(scheduler.get_dsteps()):
+    utils.make_trainable(d, True)
+    #for i in range(scheduler.get_dsteps()):
+    for i in range(1):
         print(f"At round {n_round} and step {i} of {scheduler.get_dsteps()} for D training.")
         real_imgs, real_vessels = next(trbatch)
+        print("I loaded images!")
 
-        #d_x_batch, d_y_batch = utils.input2discriminator(real_imgs, real_vessels, g.predict(real_imgs,batch_size=batch_size), d_out_shape)
-        if not DRY:
-            loss, acc = d.train_on_batch(d_x_batch, d_y_batch)
+        fake = g.predict(real_imgs,batch_size=batch_size)
+        print("I made my generator prediction, God help me.")
+        d_x_batch, d_y_batch = utils.input2discriminator(real_imgs, real_vessels, fake, d_out_shape)
+        print("I have discriminated!")
+        loss, acc = d.train_on_batch(d_x_batch, d_y_batch)
+        print(f'Training done with {loss} and {acc}.')
   
     # train G (freeze discriminator)
-    #utils.make_trainable(d, False)
-    for i in range(scheduler.get_gsteps()):
+    utils.make_trainable(d, False)
+    #for i in range(scheduler.get_gsteps()):
+    for i in range(1):
         print(f"At round {n_round} and step {i} of {scheduler.get_gsteps()} for G training.")
-        real_imgs, real_vessels, _ = next(trbatch)
+        real_imgs, real_vessels = next(trbatch)
+        print("I loaded images!")
         g_x_batch, g_y_batch=utils.input2gan(real_imgs, real_vessels, d_out_shape)
-        #if not DRY:
-        #    loss, acc = gan.train_on_batch(g_x_batch, g_y_batch)        
+        print("I made my generator input, God help me.")
+        loss, acc = gan.train_on_batch(g_x_batch, g_y_batch)
+        print(f'Training done with {loss} and {acc}.')        
   
     # evaluate on validation set
-    #if n_round in rounds_for_evaluation:
+    if n_round in rounds_for_evaluation:
+        if not trbatch.hasMoreValidation():
+            trbatch.resetValidation()
+        val_imgs, val_vessels = trbatch.getValidation()
+        print("Got validation!")
         # D
-    #    d_x_test, d_y_test=utils.input2discriminator(val_imgs, val_vessels, g.predict(val_imgs,batch_size=batch_size), d_out_shape)
-        if not DRY:
-            loss, acc=d.evaluate(d_x_test,d_y_test, batch_size=batch_size, verbose=0)
-            utils.print_metrics(n_round+1, loss=loss, acc=acc, type='D')
+        d_x_test, d_y_test=utils.input2discriminator(val_imgs, val_vessels, g.predict(val_imgs,batch_size=batch_size), d_out_shape)
+        loss, acc=d.evaluate(d_x_test,d_y_test, batch_size=batch_size, verbose=0)
+        utils.print_metrics(n_round+1, loss=loss, acc=acc, type='D')
         # G
         gan_x_test, gan_y_test=utils.input2gan(val_imgs, val_vessels, d_out_shape)
-        if not DRY:
-            loss,acc=gan.evaluate(gan_x_test,gan_y_test, batch_size=batch_size, verbose=0)
-            utils.print_metrics(n_round+1, acc=acc, loss=loss, type='GAN')
+        loss,acc=gan.evaluate(gan_x_test,gan_y_test, batch_size=batch_size, verbose=0)
+        utils.print_metrics(n_round+1, acc=acc, loss=loss, type='GAN')
         
         # save the weights
-        if not DRY:
-            g.save_weights(os.path.join(model_out_dir,"g_{}_{}_{}.h5".format(n_round,FLAGS.discriminator,FLAGS.ratio_gan2seg)))
+        g.save_weights(os.path.join(model_out_dir,"g_{}_{}_{}.h5".format(n_round,FLAGS.discriminator,FLAGS.ratio_gan2seg)))
        
     # update step sizes, learning rates
     scheduler.update_steps(n_round)
