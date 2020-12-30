@@ -293,3 +293,7 @@ results
 codes/mlruns
 codes/mlruns/*
 codes/*.tmp
+codes/CHASE
+codes/CHASE/**/*
+codes/CHASE/*
+codes/nohup.out

@@ -9,7 +9,8 @@ import utils
 import multiprocessing as mp
 from pathlib import Path
 
-outpath = Path("../data/CHASE/train")
+outpath = Path("../data/CHASESMALL/train")
+smallify=True
 
 def save(where, i, img):
     p = outpath / where / f'{i:06d}.npy'
@@ -21,14 +22,25 @@ def normalize(img):
     img = (img[...] - mean) / std
     return img
 
+def makeSmall(img):
+    if not smallify:
+        return img
+    newx = int(img.shape[0] * 0.48)
+    newy = int(img.shape[1] * 0.48)
+    return cv2.resize(img, (newx,newy), interpolation = cv2.INTER_AREA)
+
+
 def augment(imgfs, lblfs, mskfs):
-    img_size = (1024, 1024)
+    img_size = (1024, 1024) if not smallify else (480,480)
     i, imgf = imgfs
     _, lblf = lblfs
     _, mskf = mskfs
     img = utils.imagefiles2arrs([imgf])
     lbl = utils.imagefiles2arrs([lblf])
     msk = utils.imagefiles2arrs([mskf])
+    img = makeSmall(img)
+    lbl = makeSmall(lbl)
+    msk = makeSmall(msk)
     img = utils.pad_imgs(img, img_size)[0]
     lbl = utils.pad_imgs(lbl, img_size)[0]
     msk = utils.pad_imgs(msk, img_size)[0]

@@ -78,7 +78,7 @@ def DRIVE_files(data_path):
 def CHASE_files(data_path):
     img_dir=os.path.join(data_path, "images")
     vessel_dir=os.path.join(data_path,"labels")
-    mask_dir=os.path.join(data_path,"mask")
+    mask_dir=os.path.join(data_path,"masks")
     
     img_files=all_files_under(img_dir, extension=".jpg")
     vessel_files=all_files_under(vessel_dir, extension=".png")
@@ -181,7 +181,7 @@ class LowMemoryTrainBatchFetcher(Iterator):
         self.n_all_imgs=len(self.img_files)
         self.val_ratio = val_ratio
         if validation:
-            self.n_val = int((1-val_ratio)*self.n_all_imgs)
+            self.n_val = int((val_ratio)*self.n_all_imgs)
             self.n_train_imgs=int((1-val_ratio)*self.n_all_imgs)
             self.train_indices = np.random.choice(self.n_all_imgs, self.n_train_imgs, replace = False)
             self.train_img_files = np.array([self.img_files[i] for i in self.train_indices])
@@ -203,14 +203,14 @@ class LowMemoryTrainBatchFetcher(Iterator):
         self.mask = mask
         self.batch_size = batch_size
         self.validation = validation
-        self.vBatch = 32
+        self.vBatch = 60
         self.vIndex = 0
 
     def resetValidation(self):
         self.vIndex = 0
     
     def hasMoreValidation(self):
-        return(self.vIndex >= self.n_val)
+        return(self.vIndex < self.n_val)
 
     def loadFiles(self, fs, color = False):
         n = len(fs)
@@ -488,12 +488,12 @@ def get_imgs(target_dir, augmentation, img_size, dataset, mask=False):
         
     # load images    
     fundus_imgs=imagefiles2arrs(img_files)
-    vessel_imgs=imagefiles2arrs(vessel_files)/255
+    vessel_imgs=imagefiles2arrs(vessel_files)
     fundus_imgs=pad_imgs(fundus_imgs, img_size)
     vessel_imgs=pad_imgs(vessel_imgs, img_size)
     assert(np.min(vessel_imgs)==0 and np.max(vessel_imgs)==1)
     if mask:
-        mask_imgs=imagefiles2arrs(mask_files)/255
+        mask_imgs=imagefiles2arrs(mask_files)
         mask_imgs=pad_imgs(mask_imgs, img_size)
         assert(np.min(mask_imgs)==0 and np.max(mask_imgs)==1)
 
