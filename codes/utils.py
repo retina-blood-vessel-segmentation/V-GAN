@@ -158,11 +158,12 @@ class LowMemoryTrainBatchFetcher(Iterator):
     """
     fetch batch of original images and vessel images
     """
-    def __init__(self, batch_size, target_dir, img_size, dataset, val_ratio, validation = False, mask=False):
+    def __init__(self, batch_size, target_dir, img_size, dataset, val_ratio, validation = False, mask=False, patchsize=128):
         self.img_files = []
         self.vessel_files = []
         self.mask_files = []
         self.dataset_factor = 1
+        self.patchsize = patchsize
         if dataset=='DRIVE':
             self.img_files, self.vessel_files, self.mask_files = DRIVE_files(target_dir)
             self.dataset_factor = 255
@@ -205,6 +206,8 @@ class LowMemoryTrainBatchFetcher(Iterator):
         self.validation = validation
         self.vBatch = 60
         self.vIndex = 0
+        self.npatch = self.img_size[0] // self.patchsize
+        np.random.seed()
 
     def resetValidation(self):
         self.vIndex = 0
@@ -212,19 +215,35 @@ class LowMemoryTrainBatchFetcher(Iterator):
     def hasMoreValidation(self):
         return(self.vIndex < self.n_val)
 
-    def loadFiles(self, fs, color = False):
-        n = len(fs)
-        if color:
-            r = np.empty((n,) +  self.img_size + (3,))
-        else:
-            r = np.empty((n,) +  self.img_size + (1,))
-        for index, fname in enumerate(fs):
+    def loadFiles(self, fs, color = False, whole = True):
+        if whole:
+            n = len(fs)
             if color:
-                r[index, ...] = np.load(fname)
+                r = np.empty((n,) +  self.img_size + (3,))
             else:
-                r[index, ...] = np.expand_dims(np.load(fname), 2)
-
-        return r
+                r = np.empty((n,) +  self.img_size + (1,))
+            for index, fname in enumerate(fs):
+                if color:
+                    r[index, ...] = np.load(fname)
+                else:
+                    r[index, ...] = np.expand_dims(np.load(fname), 2)
+            return r
+        else:
+            n = len(fs)
+            if color:
+                r = np.empty((n,) +  (self.patchsize, self.patchsize) + (3,))
+                tmp = np.empty(self.img_size + (3,))
+            else:
+                r = np.empty((n,) +  (self.patchsize, self.patchsize) + (1,))
+                tmp = np.empty(self.img_size + (1,))
+            for index, fname in enumerate(fs):
+                p, q = np.random.randint(0, self.npatch, 2)
+                if color:
+                    tmp = np.load(fname)
+                else:
+                    tmp = np.expand_dims(np.load(fname), 2)
+                r[index, ...] = tmp[p*self.patchsize:(p+1)*self.patchsize, q*self.patchsize:(q+1)*self.patchsize,...]
+            return r
 
     def getValidation(self):
         if not self.validation:
@@ -239,7 +258,7 @@ class LowMemoryTrainBatchFetcher(Iterator):
             return (self.loadFiles(self.val_img_files[indices], True),self.loadFiles(self.val_vessel_files[indices]))
 
     def getTrainN(self):
-        return self.train_img_files.shape[0]
+        return self.train_img_files.shape[0] * self.npatch * self.npatch
 
     def next(self):
         n = self.train_img_files.shape[0]
@@ -249,9 +268,9 @@ class LowMemoryTrainBatchFetcher(Iterator):
         if not self.validation:
             return None 
         if self.mask:
-            return (self.loadFiles(self.train_img_files[indices], True),self.loadFiles(self.train_vessel_files[indices]),self.loadFiles(self.train_mask_files[indices]))
+            return (self.loadFiles(self.train_img_files[indices], True, False),self.loadFiles(self.train_vessel_files[indices], False, False),self.loadFiles(self.train_mask_files[indices], False, False))
         else:
-            return (self.loadFiles(self.train_img_files[indices], True),self.loadFiles(self.train_vessel_files[indices]))
+            return (self.loadFiles(self.train_img_files[indices], True, False),self.loadFiles(self.train_vessel_files[indices], False, False))
         
 
 def AUC_ROC(true_vessel_arr, pred_vessel_arr, save_fname):
@@ -544,12 +563,12 @@ def operating_pts_human_experts(gt_vessels, pred_vessels, masks):
     return op_pts_roc, op_pts_pr
 
 def pixel_values_in_mask(true_vessels, pred_vessels,masks, split_by_img=False):
-    assert np.max(pred_vessels)<=1.0 and np.min(pred_vessels)>=0.0
-    assert np.max(true_vessels)==1.0 and np.min(true_vessels)==0.0
-    assert np.max(masks)==1.0 and np.min(masks)==0.0
-    assert pred_vessels.shape[0]==true_vessels.shape[0] and masks.shape[0]==true_vessels.shape[0]
-    assert pred_vessels.shape[1]==true_vessels.shape[1] and masks.shape[1]==true_vessels.shape[1]
-    assert pred_vessels.shape[2]==true_vessels.shape[2] and masks.shape[2]==true_vessels.shape[2]
+    #assert np.max(pred_vessels)<=1.0 and np.min(pred_vessels)>=0.0
+    #assert np.max(true_vessels)==1.0 and np.min(true_vessels)==0.0
+    #assert np.max(masks)==1.0 and np.min(masks)==0.0
+    #assert pred_vessels.shape[0]==true_vessels.shape[0] and masks.shape[0]==true_vessels.shape[0]
+    #assert pred_vessels.shape[1]==true_vessels.shape[1] and masks.shape[1]==true_vessels.shape[1]
+    #assert pred_vessels.shape[2]==true_vessels.shape[2] and masks.shape[2]==true_vessels.shape[2]
     
     if split_by_img:
         n=pred_vessels.shape[0]
@@ -626,3 +645,43 @@ class Scheduler:
         if key in self.schedules['step_decay']:
             self.dsteps=max(int(self.init_dsteps*self.schedules['step_decay'][key]),1)
             self.gsteps=max(int(self.init_gsteps*self.schedules['step_decay'][key]),1)
+
+def chopup(imgs, size=128, mono=False):
+    if not mono:
+        n = imgs.shape[1] // size
+        r = np.empty((n*n,) + (imgs.shape[0],) + (size,size) + (imgs.shape[3],))
+        for i in range(n):
+            for j in range(n):
+                for k in range(imgs.shape[0]):
+                    r[i*n + j, k, ...] = imgs[k,i*size:(i+1)*size, j*size:(j+1)*size,...]
+        return r
+    else:
+        n = imgs.shape[1] // size
+        r = np.empty((n*n,) + (imgs.shape[0],) + (size,size))
+        for i in range(n):
+            for j in range(n):
+                for k in range(imgs.shape[0]):
+                    r[i*n + j, k, ...] = imgs[k,i*size:(i+1)*size, j*size:(j+1)*size,...]
+        return r
+
+def integrate(bits, mono=False):
+    if not mono:
+        n = int(np.sqrt(bits.shape[0]))
+        d = n * bits.shape[2]
+        s = bits.shape[2]
+        r = np.empty((bits.shape[1],) + (d,d) + (bits.shape[4],))
+        for k in range(bits.shape[1]):
+            for i in range(n):
+                for j in range(n):
+                    r[k, i*s:(i+1)*s, j*s:(j+1)*s,...] = bits[i*n + j, k, ...]
+        return r
+    else:
+        n = int(np.sqrt(bits.shape[0]))
+        d = n * bits.shape[2]
+        s = bits.shape[2]
+        r = np.empty((bits.shape[1],) + (d,d))
+        for k in range(bits.shape[1]):
+            for i in range(n):
+                for j in range(n):
+                    r[k, i*s:(i+1)*s, j*s:(j+1)*s,...] = bits[i*n + j, k, ...]
+        return r
