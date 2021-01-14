@@ -505,3 +505,63 @@ class Scheduler:
         if key in self.schedules['step_decay']:
             self.dsteps=max(int(self.init_dsteps*self.schedules['step_decay'][key]),1)
             self.gsteps=max(int(self.init_gsteps*self.schedules['step_decay'][key]),1)
+
+def chopup(imgs, size=128, mono=False):
+    if not mono:
+        n = imgs.shape[1] // size
+        r = np.empty((n*n,) + (imgs.shape[0],) + (size,size) + (imgs.shape[3],))
+        for i in range(n):
+            for j in range(n):
+                for k in range(imgs.shape[0]):
+                    r[i*n + j, k, ...] = imgs[k,i*size:(i+1)*size, j*size:(j+1)*size,...]
+        return r
+    else:
+        n = imgs.shape[1] // size
+        r = np.empty((n*n,) + (imgs.shape[0],) + (size,size))
+        for i in range(n):
+            for j in range(n):
+                for k in range(imgs.shape[0]):
+                    r[i*n + j, k, ...] = imgs[k,i*size:(i+1)*size, j*size:(j+1)*size,...]
+        return r
+
+def integrateChunk(bits, mono=False):
+    if not mono:
+        n = int(np.sqrt(bits.shape[0]))
+        d = n * bits.shape[1]
+        s = bits.shape[1]
+        r = np.empty((d,d) + (bits.shape[3],))
+        for i in range(n):
+            for j in range(n):
+                r[i*s:(i+1)*s, j*s:(j+1)*s,...] = bits[i*n + j, ...]
+        return r
+    else:
+        n = int(np.sqrt(bits.shape[0]))
+        d = n * bits.shape[1]
+        s = bits.shape[1]
+        r = np.empty((d,d))
+        for i in range(n):
+            for j in range(n):
+                r[i*s:(i+1)*s, j*s:(j+1)*s,...] = bits[i*n + j, ...]
+        return r
+
+def integrate(bits, mono=False):
+    if not mono:
+        n = int(np.sqrt(bits.shape[0]))
+        d = n * bits.shape[2]
+        s = bits.shape[2]
+        r = np.empty((bits.shape[1],) + (d,d) + (bits.shape[4],))
+        for k in range(bits.shape[1]):
+            for i in range(n):
+                for j in range(n):
+                    r[k, i*s:(i+1)*s, j*s:(j+1)*s,...] = bits[i*n + j, k, ...]
+        return r
+    else:
+        n = int(np.sqrt(bits.shape[0]))
+        d = n * bits.shape[2]
+        s = bits.shape[2]
+        r = np.empty((bits.shape[1],) + (d,d))
+        for k in range(bits.shape[1]):
+            for i in range(n):
+                for j in range(n):
+                    r[k, i*s:(i+1)*s, j*s:(j+1)*s,...] = bits[i*n + j, k, ...]
+        return r

@@ -2,7 +2,6 @@ import glob
 import mlflow
 import os
 import utils
-
 from pathlib import Path
 
 project_path = Path('.').resolve()
@@ -10,7 +9,7 @@ project_path = Path('.').resolve()
 def predict_parallel():
     root = Path('..')
     threads = 8
-    for d in ['DRIVE', 'STARE']:
+    for d in ['CHASE']:
         allimgs = utils.all_files_under(root / "data" / "eval" / d / "images")
         allmasks = utils.all_files_under(root / "data" / "eval" / d / "masks", extension="png")
         jobs = []
