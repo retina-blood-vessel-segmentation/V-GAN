@@ -8,7 +8,7 @@ project_path = Path('.').resolve()
 
 def predict_parallel():
     root = Path('..')
-    threads = 8
+    threads = 1
     for d in ['CHASE']:
         allimgs = utils.all_files_under(root / "data" / "eval" / d / "images")
         allmasks = utils.all_files_under(root / "data" / "eval" / d / "masks", extension="png")
