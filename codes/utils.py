@@ -479,13 +479,13 @@ def pad_imgs(imgs, img_size):
     
     return padded
     
-#def random_perturbation(imgs):
-#    for i in range(imgs.shape[0]):
-#        im=Image.fromarray(imgs[i,...].astype(np.uint8))
-#       en=ImageEnhance.Color(im)
-#        im=en.enhance(random.uniform(0.8,1.2))
-#        imgs[i,...]= np.asarray(im).astype(np.float32)
-#    return imgs 
+def random_perturbationOld(imgs):
+    for i in range(imgs.shape[0]):
+        im=Image.fromarray(imgs[i,...].astype(np.uint8))
+        en=ImageEnhance.Color(im)
+        im=en.enhance(random.uniform(0.8,1.2))
+        imgs[i,...]= np.asarray(im).astype(np.float32)
+    return imgs 
 
 def random_perturbation(img):
     im=Image.fromarray(img.astype(np.uint8))
@@ -526,8 +526,8 @@ def get_imgs(target_dir, augmentation, img_size, dataset, mask=False):
         all_fundus_imgs.append(flipped_imgs)
         all_vessel_imgs.append(flipped_vessels)
         for angle in range(3,360,3):  # rotated imgs 3~360
-            all_fundus_imgs.append(random_perturbation(rotate(fundus_imgs, angle, axes=(1, 2), reshape=False)))
-            all_fundus_imgs.append(random_perturbation(rotate(flipped_imgs, angle, axes=(1, 2), reshape=False)))
+            all_fundus_imgs.append(random_perturbationOld(rotate(fundus_imgs, angle, axes=(1, 2), reshape=False)))
+            all_fundus_imgs.append(random_perturbationOld(rotate(flipped_imgs, angle, axes=(1, 2), reshape=False)))
             all_vessel_imgs.append(rotate(vessel_imgs, angle, axes=(1, 2), reshape=False))
             all_vessel_imgs.append(rotate(flipped_vessels, angle, axes=(1, 2), reshape=False))
         fundus_imgs=np.concatenate(all_fundus_imgs,axis=0)
@@ -662,6 +662,31 @@ def chopup(imgs, size=128, mono=False):
             for j in range(n):
                 for k in range(imgs.shape[0]):
                     r[i*n + j, k, ...] = imgs[k,i*size:(i+1)*size, j*size:(j+1)*size,...]
+        return r
+
+def integrateChunk(bits, mono=False):
+    print("Hello?")
+    if not mono:
+        n = int(np.sqrt(bits.shape[0]))
+        print(n)
+        d = n * bits.shape[1]
+        print(d)
+        s = bits.shape[1]
+        print(s)
+        r = np.empty((d,d) + (bits.shape[3],))
+        print(r.shape)
+        for i in range(n):
+            for j in range(n):
+                r[i*s:(i+1)*s, j*s:(j+1)*s,...] = bits[i*n + j, ...]
+        return r
+    else:
+        n = int(np.sqrt(bits.shape[0]))
+        d = n * bits.shape[1]
+        s = bits.shape[1]
+        r = np.empty((d,d))
+        for i in range(n):
+            for j in range(n):
+                r[i*s:(i+1)*s, j*s:(j+1)*s,...] = bits[i*n + j, ...]
         return r
 
 def integrate(bits, mono=False):

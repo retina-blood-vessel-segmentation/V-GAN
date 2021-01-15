@@ -1,9 +1,10 @@
-from utils import all_files_under, chopup, integrate
+from utils import all_files_under, chopup, integrate, integrateChunk
 import numpy as np
 from pathlib import Path
 from itertools import product
 import multiprocessing as mp
 import os
+from PIL import Image
 
 
 
@@ -49,6 +50,7 @@ def prepare(chunk):
     global indexCounter
     global index
     global backIndex
+    debug = False
 
     pid = str(mp.current_process().pid)
     if pid not in countermap:
@@ -56,14 +58,14 @@ def prepare(chunk):
     counter = countermap[pid]
     name = str(outdir / f'{pid}_{counter}.npy')
     rez = np.zeros((nc*nc, s, s, 5))
-    countermap[pid] = countermap[pid] + 1
+    #countermap[pid] = countermap[pid] + 1
     k = 0
     for i in range(nc):
         for j in range(nc):
             b = chunk[k]
-            img = np.load(str(p / "images" / f'{b[0]}.npy'))
-            msk = np.load(str(p / "masks" / f'{b[0]}.npy'))
-            gnd = np.load(str(p / "labels" / f'{b[0]}.npy'))
+            img = np.load(str(p / "images" / f'{b[0]}.npy'), mmap_mode='r')
+            msk = np.load(str(p / "masks" / f'{b[0]}.npy'), mmap_mode='r')
+            gnd = np.load(str(p / "labels" / f'{b[0]}.npy'), mmap_mode='r')
             #img, msk, gnd = load(b[0])
             rez[k, :, :, :3] = img[b[1]*s:(b[1] + 1)*s, b[2]*s:(b[2] + 1)*s, ...]
             rez[k, :, :, 3] = msk[b[1]*s:(b[1] + 1)*s, b[2]*s:(b[2] + 1)*s, ...]
@@ -71,6 +73,17 @@ def prepare(chunk):
             k = k + 1
     np.save(name, rez)
     print(f'Processed {name}')
+    #if debug:
+    #    print(rez.shape)
+    #    img = integrateChunk(rez)
+    #    print(img.shape)
+    #    im = Image.fromarray((img[:,:,:3]*255).astype(np.uint8))
+    #    im.save(f'{pid}_{counter}_img.png')
+    #    im = Image.fromarray((img[:,:,3]*255).astype(np.uint8))
+    #    im.save(f'{pid}_{counter}_msk.png')
+    #    im = Image.fromarray((img[:,:,4]*255).astype(np.uint8))
+    #    im.save(f'{pid}_{counter}_lbl.png')
+    #    exit(1)
     countermap[pid] = countermap[pid] + 1
             
 

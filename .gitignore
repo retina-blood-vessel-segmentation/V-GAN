@@ -297,3 +297,4 @@ codes/CHASE
 codes/CHASE/**/*
 codes/CHASE/*
 codes/nohup.out
+codes/*.png
